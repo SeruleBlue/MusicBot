@@ -491,7 +491,7 @@ class MusicBot(discord.Client):
       name = u'{}{}'.format(prefix, entry.title)[:128]
       game = discord.Game(name=name)
 
-    await self.change_presence(game)
+    await self.change_presence(game=game)
 
   async def safe_send_message(self, dest, content, *, tts=False, expire_in=0,
                               also_delete=None, quiet=False):
@@ -1548,6 +1548,12 @@ class MusicBot(discord.Client):
                     delete_after=15)
 
   async def cmd_repeat(self):
+    """
+    Usage:
+        {command_prefix}repeat
+
+    Toggles repeating a single song.
+    """
     self.config.repeat = not self.config.repeat
     if self.config.repeat:
       return Response(':repeat_one: enabled!', delete_after=10)
@@ -1555,6 +1561,13 @@ class MusicBot(discord.Client):
       return Response(':repeat_one: disabled!', delete_after=10)
 
   async def cmd_repeatall(self):
+    """
+    Usage:
+        {command_prefix}repeatall
+
+    Toggles repeating an entire playlist. If on, songs are re-added to the
+    playlist instead of being removed when played.
+    """
     self.config.repeat_all = not self.config.repeat_all
     if self.config.repeat_all:
       return Response(':repeat: enabled!', delete_after=10)
@@ -1563,6 +1576,12 @@ class MusicBot(discord.Client):
 
   async def cmd_skipto(self, player, channel, author, message, permissions,
                        voice_channel, index=1):
+    """
+    Usage:
+        {command_prefix}skipto index
+
+    Skips to the indicated song in a playlist.
+    """
     try:
       float(index)  # lazy check
       index = min(int(index), 1000)
@@ -1574,8 +1593,9 @@ class MusicBot(discord.Client):
     if not player.playlist:
       return Response("No current playlist.", delete_after=10)
 
-    if index < 0 or index >= len(player.playlist):
-      return Response("That index doesn't make sense, try again.",
+    if index < 0 or index >= len(player.playlist.entries):
+      return Response("That index (**" + str(index) + "**) doesn't make sense, "
+                                                    "try again.",
                       delete_after=10)
 
     if author.id == self.config.owner_id \
@@ -1583,8 +1603,12 @@ class MusicBot(discord.Client):
         or author == player.current_entry.meta.get('author', None):
       old_repeat_state = self.config.repeat
       self.config.repeat = False
-      for i in range(index):
-        player.skip()
+      if self.config.repeat_all:
+        player.playlist.entries.rotate(-(index - 1))
+      else:
+        for i in range(index - 1):
+          player.playlist.entries.popleft()
+      player.skip()
       self.config.repeat = old_repeat_state
       return Response(":fast_forward: Skipped to %s!" %
                       player.playlist.peek().title,
@@ -1795,7 +1819,7 @@ class MusicBot(discord.Client):
       lines.append(repeat_status)
 
     message = '\n'.join(lines)
-    return Response(message, delete_after=30)
+    return Response(message, delete_after=45)
 
   async def cmd_clean(self, message, channel, server, author, search_range=50):
     """
